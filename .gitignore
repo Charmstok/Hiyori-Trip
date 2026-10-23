@@ -12,3 +12,20 @@ coverage/
 backups/
 exports/
 
+# Personal SQLite database and all local verification files
+/.local-data/
+/tests/
+/test/
+**/*.test.*
+**/*.spec.*
+/test-results/
+/playwright-report/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+**/__tests__/
+**/tests/
+**/test/
+**/test-results/
+**/playwright-report/

@@ -1,0 +1,7 @@
+node_modules
+dist
+.local-dev
+package-lock.json
+src/data/japan.json
+
+src/data/regions.json
