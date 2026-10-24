@@ -288,11 +288,11 @@ export default function App() {
         >
           <div className="saved-file-message">
             <Check size={24} />
-            <p>已保存到项目目录下的 exports 文件夹：</p>
+            <p>文件已保存到：</p>
           </div>
           <p className="saved-file-path">{savedFile.path}</p>
           <p className="form-hint">
-            可以在访达中前往此路径查看。同名文件会自动编号，不会覆盖已有文件。
+            可以在系统文件管理器中前往此路径查看。同名文件会自动编号，不会覆盖已有文件。
           </p>
           <div className="modal-actions">
             <button
@@ -359,15 +359,20 @@ export default function App() {
             </p>
             <h3>导出与备份</h3>
             <p>
-              PNG、PDF、图片 ZIP 和 SQLite 备份都保存在项目的 <code>exports/</code>{' '}
-              目录，成功后会显示完整路径。数据库与导出目录均已加入 Git
-              忽略列表。需要恢复数据库时，先停止程序并保留现有 .local-data
+              PNG、PDF 和图片 ZIP 保存在当前用户的下载目录，macOS 为 ~/Downloads，Linux
+              优先使用系统设置的下载目录；SQLite 备份保存在项目的 exports/
+              目录。成功后会显示完整路径。需要恢复数据库时，先停止程序并保留现有 .local-data
               文件夹，再将备份放入新建的同名文件夹，命名为 hiyori.sqlite。
             </p>
             <h3>关于地图</h3>
             <p>
-              地图使用 Natural Earth
-              公共领域数据，冲绳以插图表示。城市卡片引线指向地图上的城市，行程连线用于规划示意，地点建议为离线参考；请自行核实开放、预约与交通信息。
+              主页使用 Natural Earth
+              示意地图，冲绳以插图表示。编辑器可展开详细地图，搜索具体地点或手动选点；地址与准确坐标随安排保存。旧版城市中心坐标会显示为待定位。编号虚线只表示安排顺序，交通方案可点击“交通路线”在
+              Google 地图查看。
+            </p>
+            <p>
+              详细底图由 OpenStreetMap 提供，地点搜索由 Photon
+              提供，均需要联网。搜索仅在提交时发送地点关键词和城市附近坐标，不发送行程日期、备注和费用；服务不可用时仍能编辑已有安排。地点名称建议使用日文或英文，开放时间与预约请自行核实。
             </p>
             <button
               className="button primary"

@@ -1,5 +1,5 @@
 import type { Activity, Day, Trip } from '../types';
-import { findPlace } from '../data/places.ts';
+import { withReferenceLocation } from './reference-trip.ts';
 
 export const UNSCHEDULED = 'unscheduled';
 export const activitiesIn = (trip: Trip, containerId: string) =>
@@ -47,7 +47,6 @@ export function newActivity(city = ''): Activity {
     address: '',
     notes: '',
     cost: 0,
-    ...(findPlace(city) ? { coordinates: findPlace(city)!.coordinates } : {}),
   };
 }
 export function createTrip(title: string, startDate: string, count: number, city = ''): Trip {
@@ -142,6 +141,10 @@ export function sampleTrip(): Trip {
       },
       { ...newActivity(city), title: b, time: '14:30', duration: '2 小时' },
     ],
+  }));
+  trip.days = trip.days.map((day) => ({
+    ...day,
+    activities: day.activities.map(withReferenceLocation),
   }));
   return trip;
 }

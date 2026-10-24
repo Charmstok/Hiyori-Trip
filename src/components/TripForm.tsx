@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowRight, MapPin, LoaderCircle } from 'lucide-react';
+import { ArrowRight, LoaderCircle } from 'lucide-react';
 import { Modal } from './Modal';
-import { CityOptions } from './CityOptions';
+import { CitySelector } from './CitySelector';
 import { createTrip, dateAt, inclusiveDays, newDay, today, tripCities } from '../lib/trips';
 import type { Trip } from '../types';
 
@@ -133,18 +133,7 @@ export function TripForm({
             ? `共 ${days} 天，包含出发与返回当日。`
             : '请选择出发与返回日期。'}
         </p>
-        {!trip && (
-          <label>
-            第一站 <span className="optional">可选</span>
-            <div className="input-with-icon">
-              <MapPin size={17} />
-              <select value={city} onChange={(e) => setCity(e.target.value)}>
-                <option value="">还没决定，慢慢想</option>
-                <CityOptions />
-              </select>
-            </div>
-          </label>
-        )}
+        {!trip && <CitySelector label="第一站" value={city} onChange={setCity} />}
         <fieldset className="color-picker">
           <legend>旅程颜色</legend>
           {(['green', 'clay', 'blue'] as const).map((c, i) => (

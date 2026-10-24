@@ -10,7 +10,22 @@
 
 - Region highlights: [Natural Earth, Admin 1 – States and Provinces, 1:10m](https://www.naturalearthdata.com/downloads/10m-cultural-vectors/10m-admin-1-states-provinces/), from [ne_10m_admin_1_states_provinces.geojson](https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_10m_admin_1_states_provinces.geojson). Retrieved 2026-10-23, public domain. Japan's 47 prefectures were grouped into eight travel regions, nonessential properties removed, and coordinates rounded to four decimal places in `src/data/regions.json`. Mie is included in Kansai; Chugoku and Shikoku are combined for exploration.
 
-## Noto Sans SC
+## Detailed map and place search
+
+- Map library: [Leaflet 1.9.4](https://leafletjs.com/), BSD-2-Clause. Package license is retained in npm distribution.
+- Detailed map tiles and selected search results: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), ODbL. Attribution stays visible on the map and in place search results. Tiles are requested on demand using the browser cache, following the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/); no bulk download or offline tile archive is provided.
+- Place search: [Photon by komoot](https://github.com/komoot/photon), using its public API under the stated fair-use terms. Searches are explicitly submitted by the user, limited to Japan, serialized and cached locally in memory. The public service does not guarantee availability. Saved itinerary content is not uploaded to the provider.
+- Google Maps links use the official [Maps URLs](https://developers.google.com/maps/documentation/urls/get-started) format. No Google map SDK or API key is embedded.
+
+## City and municipality selector
+
+- City/ward/town/village names are derived from [Geolonia Japanese Addresses](https://github.com/geolonia/japanese-addresses), [municipality list](https://geolonia.github.io/japanese-addresses/api/ja.json), retrieved 2026-10-23. The snapshot covers all 1,895 source entries across 47 prefectures; 20 whole-city entries and a Tokyo metropolitan entry are added for convenient selection, yielding 1,916 choices.
+- Representative city/prefecture coordinates come from [Geolonia Japanese Addresses v2](https://github.com/geolonia/japanese-addresses-v2), whose upstream source is Japan's Digital Agency Address Base Registry. Coordinates initialize the map view and are not treated as a landmark location.
+- Geolonia address data is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changes: simplified Chinese labels, Chinese forms for kana place names, regional grouping, disambiguation of duplicate names, rounding of representative coordinates, and compatibility aliases for the existing planner.
+- [OpenCC.js](https://github.com/nk2028/opencc-js), MIT, was used only during local data preparation. It is not an application dependency. Japanese source names are retained internally for matching existing data; the selector displays Chinese labels.
+- The 10 reference itinerary coordinates in `src/data/reference-places.ts` are selected from OpenStreetMap/Photon results checked 2026-10-23. The Kamo River walk uses Sanjo Bridge as its reference point; Naramachi uses the vicinity of Koshi-no-Ie. These are editable planning references, not guaranteed entrances or transport routes.
+
+## Noto Sans SC distribution
 
 - Copyright 2014–2021 Adobe; font copyright metadata and upstream authorship retained in the font.
 - Upstream: [Google Fonts / Noto Sans SC](https://github.com/google/fonts/tree/main/ofl/notosanssc).

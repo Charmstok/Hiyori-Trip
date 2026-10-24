@@ -131,7 +131,7 @@ export function ExportModal({
       <div className="export-layout">
         <div className="export-controls">
           <p className="export-intro">
-            发给同行的朋友，或留一份给路上的自己。文件自动保存到项目的 exports 文件夹。
+            发给同行的朋友，或留一份给路上的自己。文件自动保存到当前用户的下载文件夹。
           </p>
           <label>
             图片预览

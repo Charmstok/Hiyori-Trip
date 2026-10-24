@@ -23,6 +23,11 @@ function parseActivity(value: unknown): Activity {
   if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) bad();
   const coordinates = a.coordinates;
   if (
+    a.locationSource !== undefined &&
+    (!['search', 'pin'].includes(a.locationSource as string) || coordinates === undefined)
+  )
+    bad();
+  if (
     coordinates !== undefined &&
     (!Array.isArray(coordinates) ||
       coordinates.length !== 2 ||
@@ -42,6 +47,7 @@ function parseActivity(value: unknown): Activity {
     notes: string(a.notes),
     cost: a.cost as number,
     ...(coordinates ? { coordinates: coordinates as [number, number] } : {}),
+    ...(a.locationSource ? { locationSource: a.locationSource as Activity['locationSource'] } : {}),
   };
 }
 function parseDay(value: unknown): Day {

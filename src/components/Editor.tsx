@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DragDropProvider, useDroppable } from '@dnd-kit/react';
 import { isSortable, useSortable } from '@dnd-kit/react/sortable';
 import {
@@ -18,6 +18,9 @@ import {
   Download,
   GripVertical,
   MapPin,
+  List,
+  PanelLeftClose,
+  PanelLeftOpen,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -30,7 +33,7 @@ import {
   Utensils,
   Wallet,
 } from 'lucide-react';
-import type { Activity, Day, Place, Trip } from '../types';
+import type { Activity, Day, Trip, MapPlace } from '../types';
 import {
   activitiesIn,
   UNSCHEDULED,
@@ -47,9 +50,11 @@ import {
 } from '../lib/trips';
 import { findPlace } from '../data/places';
 import { useTrips } from '../lib/store';
-import { CityOptions } from './CityOptions';
+import { CitySelector } from './CitySelector';
+import { cityCenter, cityValueForName } from '../lib/cities';
 import { ActivityForm } from './ActivityForm';
-import { JapanMap } from './JapanMap';
+import { TripMap } from './TripMap';
+import { isLocated } from '../lib/locations';
 import { Modal } from './Modal';
 
 const CategoryIcon = ({
@@ -73,6 +78,14 @@ const CategoryIcon = ({
               : MapPin;
   return <Icon size={size} strokeWidth={1.6} />;
 };
+function revealDate(button: HTMLElement | null | undefined) {
+  const list = button?.parentElement;
+  if (!button || !list) return;
+  const item = button.getBoundingClientRect();
+  const viewport = list.getBoundingClientRect();
+  if (item.top < viewport.top) list.scrollTop -= viewport.top - item.top;
+  else if (item.bottom > viewport.bottom) list.scrollTop += item.bottom - viewport.bottom;
+}
 function CalendarTarget({
   containerId,
   active,
@@ -95,9 +108,16 @@ function CalendarTarget({
     accept: 'activity',
     data: { kind: 'calendar', containerId },
   });
+  const button = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (active) revealDate(button.current);
+  }, [active]);
   return (
     <button
-      ref={ref}
+      ref={(node) => {
+        ref(node);
+        button.current = node;
+      }}
       className={`day-button ${active ? 'active' : ''} ${isDropTarget ? 'drop-target' : ''} ${containerId === UNSCHEDULED ? 'unscheduled-button' : ''}`}
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
@@ -137,21 +157,25 @@ function ActivityCard({
   containerId,
   index,
   onEdit,
+  onLocate,
   onRemove,
   onDuplicate,
   onMoveUp,
   onMoveDown,
   isLast,
+  selected,
 }: {
   activity: Activity;
   containerId: string;
   index: number;
   onEdit: () => void;
+  onLocate: () => void;
   onRemove: () => void;
   onDuplicate: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   isLast: boolean;
+  selected: boolean;
 }) {
   const { ref, handleRef, isDragging } = useSortable({
     id: activity.id,
@@ -161,7 +185,10 @@ function ActivityCard({
     data: { kind: 'activity', containerId },
   });
   return (
-    <article ref={ref} className={`activity-card ${isDragging ? 'dragging' : ''}`}>
+    <article
+      ref={ref}
+      className={`activity-card ${isDragging ? 'dragging' : ''} ${selected ? 'selected' : ''}`}
+    >
       <div className="activity-time">
         <span>{activity.time || '自由安排'}</span>
         <i />
@@ -178,9 +205,18 @@ function ActivityCard({
       </div>
       <div className="activity-content">
         <div className="activity-title-line">
-          <button className="activity-title" onClick={onEdit}>
-            {activity.title}
-          </button>
+          {isLocated(activity) ? (
+            <button
+              className="activity-title"
+              onClick={onLocate}
+              aria-pressed={selected}
+              title="在地图上定位"
+            >
+              {activity.title}
+            </button>
+          ) : (
+            <span className="activity-title">{activity.title}</span>
+          )}
           <span className="category-label">{activity.category}</span>
         </div>
         <div className="activity-meta">
@@ -204,6 +240,10 @@ function ActivityCard({
           <button onClick={onEdit}>
             <Pencil size={13} />
             编辑 / 移动
+          </button>
+          <button onClick={onLocate} aria-label={`在地图上查看${activity.title}`}>
+            <MapPin size={13} />
+            地图
           </button>
           <button onClick={onDuplicate} aria-label={`复制${activity.title}`} title="复制安排">
             <Copy size={13} />
@@ -253,14 +293,30 @@ export function Editor({ trip, onBack, onEditTrip, onExport, onBackup, notify, c
     dayId: string;
     isNew: boolean;
   }>();
-  const [selectedPlace, setSelectedPlace] = useState<Place>();
+  const [selectedCity, setSelectedCity] = useState<string>();
+  const [itineraryHidden, setItineraryHidden] = useState(false);
+  const [exploreCity, setExploreCity] = useState(false);
+  const [focusRequest, setFocusRequest] = useState(0);
+  const [focusedActivity, setFocusedActivity] = useState<string>();
   const [noteModal, setNoteModal] = useState(false);
   const [tools, setTools] = useState(false);
   const [dragging, setDragging] = useState(false);
   const activeDrag = useRef<{ activityId: string; from: string } | undefined>(undefined);
+  const dayContent = useRef<HTMLElement>(null);
+  const expandedCalendar = useRef<HTMLElement>(null);
+  const collapsedCalendar = useRef<HTMLElement>(null);
   function setDayId(value: string) {
     setCurrentDay(value);
-    setSelectedPlace(undefined);
+    setSelectedCity(undefined);
+    setFocusedActivity(undefined);
+  }
+  function locateActivity(activityId?: string) {
+    setFocusedActivity(activityId);
+    setFocusRequest((value) => value + 1);
+    if (activityId) revealMap();
+  }
+  function revealMap() {
+    if (window.matchMedia('(max-width: 760px)').matches) setItineraryHidden(true);
   }
   const save = useTrips((s) => s.save),
     undo = useTrips((s) => s.undo),
@@ -273,9 +329,21 @@ export function Editor({ trip, onBack, onEditTrip, onExport, onBackup, notify, c
   const day: Day = isUnscheduled
     ? { id: UNSCHEDULED, title: '待规划', notes: '', activities: trip.unscheduled }
     : trip.days[dayIndex];
+  const lastVisibleDay = useRef(day.id);
+  useEffect(() => {
+    if (!itineraryHidden && lastVisibleDay.current !== day.id) {
+      dayContent.current?.scrollTo({ top: 0 });
+      lastVisibleDay.current = day.id;
+    }
+  }, [day.id, itineraryHidden]);
+  useEffect(() => {
+    const calendar = itineraryHidden ? collapsedCalendar : expandedCalendar;
+    revealDate(calendar.current?.querySelector<HTMLElement>('[aria-current="page"]'));
+  }, [day.id, itineraryHidden]);
   const cities = tripCities(trip);
   const dayCities = [...new Set(day.activities.map((a) => a.city).filter(Boolean))];
-  const place = selectedPlace || findPlace(dayCities[0] || cities[0] || '京都');
+  const mapCity = selectedCity ?? (dayCities[0] || cities[0] || trip.destination || '京都');
+  const place = findPlace(mapCity);
   const updateDay = (updated: Day) =>
     save(
       updated.id === UNSCHEDULED
@@ -288,6 +356,23 @@ export function Editor({ trip, onBack, onEditTrip, onExport, onBackup, notify, c
       dayId: day.id,
       isNew: true,
     });
+  function addLocated(place: MapPlace) {
+    setActivityForm({
+      activity: {
+        ...newActivity(
+          cityValueForName(place.city, place.address) || dayCities[0] || cities[0] || '',
+        ),
+        title: place.source === 'search' ? place.name : '',
+        address: place.address,
+        coordinates: place.coordinates,
+        locationSource: place.source,
+        category: place.category,
+        ...(isUnscheduled ? { time: '' } : {}),
+      },
+      dayId: day.id,
+      isNew: true,
+    });
+  }
   const removeActivity = (activity: Activity) => {
     void updateDay({ ...day, activities: day.activities.filter((a) => a.id !== activity.id) });
     notify('已删除安排，可撤销。');
@@ -315,6 +400,7 @@ export function Editor({ trip, onBack, onEditTrip, onExport, onBackup, notify, c
     const saved = await save(result);
     setActivityForm(undefined);
     setDayId(target);
+    locateActivity(activity.id);
     if (saved)
       notify(
         form.isNew
@@ -350,7 +436,7 @@ export function Editor({ trip, onBack, onEditTrip, onExport, onBackup, notify, c
     void save({ ...trip, days });
   }
   return (
-    <div className="editor">
+    <div className="editor editor-map-workspace">
       <div className="editor-breadcrumb">
         <button onClick={onBack}>
           <ArrowLeft size={16} />
@@ -375,6 +461,15 @@ export function Editor({ trip, onBack, onEditTrip, onExport, onBackup, notify, c
           </p>
         </div>
         <div className="editor-heading-actions">
+          <button
+            className="button secondary"
+            onClick={() => setItineraryHidden(!itineraryHidden)}
+            aria-expanded={!itineraryHidden}
+            aria-controls="itinerary-panel"
+          >
+            {itineraryHidden ? <List size={16} /> : <PanelLeftClose size={16} />}
+            {itineraryHidden ? '展开行程' : '收起行程'}
+          </button>
           <button
             className="button secondary"
             disabled={!canUndo}
@@ -489,296 +584,379 @@ export function Editor({ trip, onBack, onEditTrip, onExport, onBackup, notify, c
           }
         }}
       >
-        <div className="editor-layout">
-          <aside className="day-sidebar">
-            <div className="sidebar-label">
-              <span>旅程日历</span>
-              <span>{String(trip.days.length).padStart(2, '0')} DAYS</span>
+        <div className={`map-workspace ${itineraryHidden ? 'itinerary-hidden' : ''}`}>
+          <section
+            className="itinerary-panel glass-panel"
+            id="itinerary-panel"
+            aria-label="行程安排"
+            hidden={itineraryHidden}
+            data-map-overlay
+          >
+            <div className="itinerary-panel-heading">
+              <span>
+                <CalendarDays size={15} /> 旅行日历
+              </span>
+              <button
+                className="icon-button"
+                aria-label="收起行程面板"
+                onClick={() => setItineraryHidden(true)}
+              >
+                <PanelLeftClose size={17} />
+              </button>
             </div>
-            <p className={`calendar-drop-hint ${dragging ? 'visible' : ''}`}>
-              {dragging ? '拖到日期或待规划，松开即可移动' : '先收藏目的地，再安排哪一天去'}
-            </p>
-            <nav className="day-list" aria-label="选择行程日期或待规划">
-              <CalendarTarget
-                containerId={UNSCHEDULED}
-                active={isUnscheduled}
-                label="待规划"
-                subtitle="先收藏想去的地方"
-                count={trip.unscheduled.length}
-                onClick={() => setDayId(UNSCHEDULED)}
-              />
-              {trip.days.map((d, i) => (
-                <CalendarTarget
-                  key={d.id}
-                  containerId={d.id}
-                  active={day.id === d.id}
-                  label={`Day ${i + 1}`}
-                  subtitle={d.title || dateLabel(dateAt(trip.startDate, i))}
-                  number={i + 1}
-                  count={d.activities.length}
-                  onClick={() => setDayId(d.id)}
-                />
-              ))}
-            </nav>
-            <button
-              className="add-day"
-              onClick={() => void addDay()}
-              disabled={trip.days.length >= 60}
-            >
-              <Plus size={15} />
-              再多留一天
-            </button>
-            <div className="sidebar-summary">
-              <p>
-                <Wallet size={15} />
-                预计花费
+            <aside className="day-sidebar">
+              <div className="sidebar-label">
+                <span>旅程日历</span>
+                <span>{String(trip.days.length).padStart(2, '0')} DAYS</span>
+              </div>
+              <p className={`calendar-drop-hint ${dragging ? 'visible' : ''}`}>
+                {dragging ? '拖到日期或待规划，松开即可移动' : '先收藏目的地，再安排哪一天去'}
               </p>
-              <strong>
-                <small>JPY</small> {totalCost(trip).toLocaleString('zh-CN')}
-              </strong>
-              <span>按已填写的安排合计</span>
-            </div>
-            <button
-              className="sidebar-notes"
-              onClick={() => {
-                setNoteModal(true);
-              }}
-            >
-              <StickyNote size={15} />
-              旅程随手记
-              <ArrowUpRight size={14} />
-            </button>
-          </aside>
-          <main className="day-main">
-            <div className="day-main-heading">
-              <div>
-                <p className="eyebrow">
-                  {isUnscheduled ? (
-                    'SOMEDAY, SOMEWHERE'
-                  ) : (
-                    <>
-                      DAY {String(dayIndex + 1).padStart(2, '0')} <span>/</span>{' '}
-                      {dateLabel(dateAt(trip.startDate, dayIndex))}
-                    </>
-                  )}
+              <label className="calendar-jump">
+                <span className="sr-only">选择行程日期</span>
+                <select value={day.id} onChange={(event) => setDayId(event.target.value)}>
+                  <option value={UNSCHEDULED}>待规划 · 稍后安排日期</option>
+                  {trip.days.map((d, i) => (
+                    <option key={d.id} value={d.id}>
+                      Day {i + 1} · {dateLabel(dateAt(trip.startDate, i))}
+                      {d.title ? ` · ${d.title}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <nav ref={expandedCalendar} className="day-list" aria-label="选择行程日期或待规划">
+                <CalendarTarget
+                  containerId={UNSCHEDULED}
+                  active={isUnscheduled}
+                  label="待规划"
+                  subtitle="先收藏想去的地方"
+                  count={trip.unscheduled.length}
+                  onClick={() => setDayId(UNSCHEDULED)}
+                />
+                {trip.days.map((d, i) => (
+                  <CalendarTarget
+                    key={d.id}
+                    containerId={d.id}
+                    active={day.id === d.id}
+                    label={`Day ${i + 1}`}
+                    subtitle={d.title || dateLabel(dateAt(trip.startDate, i))}
+                    number={i + 1}
+                    count={d.activities.length}
+                    onClick={() => setDayId(d.id)}
+                  />
+                ))}
+              </nav>
+              <button
+                className="add-day"
+                onClick={() => void addDay()}
+                disabled={trip.days.length >= 60}
+              >
+                <Plus size={15} />
+                再多留一天
+              </button>
+              <div className="sidebar-summary">
+                <p>
+                  <Wallet size={15} />
+                  预计花费
                 </p>
-                {isUnscheduled ? (
-                  <h2 className="unscheduled-heading">想去的地方，先放这里</h2>
-                ) : (
-                  <label className="day-title-label">
-                    <span className="sr-only">当日主题</span>
-                    <input
-                      key={`${day.id}:title`}
-                      className="day-title-input"
-                      value={day.title}
-                      placeholder="给这一天起个名字"
-                      maxLength={200}
-                      onChange={(e) => void updateDay({ ...day, title: e.target.value })}
-                    />
-                  </label>
+                <strong>
+                  <small>JPY</small> {totalCost(trip).toLocaleString('zh-CN')}
+                </strong>
+                <span>按已填写的安排合计</span>
+              </div>
+              <button
+                className="sidebar-notes"
+                onClick={() => {
+                  setNoteModal(true);
+                }}
+              >
+                <StickyNote size={15} />
+                旅程随手记
+                <ArrowUpRight size={14} />
+              </button>
+            </aside>
+            <main className="day-main" ref={dayContent}>
+              <div className="day-main-heading">
+                <div>
+                  <p className="eyebrow">
+                    {isUnscheduled ? (
+                      'SOMEDAY, SOMEWHERE'
+                    ) : (
+                      <>
+                        DAY {String(dayIndex + 1).padStart(2, '0')} <span>/</span>{' '}
+                        {dateLabel(dateAt(trip.startDate, dayIndex))}
+                      </>
+                    )}
+                  </p>
+                  {isUnscheduled ? (
+                    <h2 className="unscheduled-heading">想去的地方，先放这里</h2>
+                  ) : (
+                    <label className="day-title-label">
+                      <span className="sr-only">当日主题</span>
+                      <input
+                        key={`${day.id}:title`}
+                        className="day-title-input"
+                        value={day.title}
+                        placeholder="给这一天起个名字"
+                        maxLength={200}
+                        onChange={(e) => void updateDay({ ...day, title: e.target.value })}
+                      />
+                    </label>
+                  )}
+                </div>
+                {!isUnscheduled && (
+                  <div className="day-heading-tools">
+                    <button
+                      className="icon-button"
+                      disabled={dayIndex === 0}
+                      onClick={() => shiftDay(-1)}
+                      title="将这一天前移"
+                      aria-label="将这一天前移"
+                    >
+                      <ArrowUp size={16} />
+                    </button>
+                    <button
+                      className="icon-button"
+                      disabled={dayIndex === trip.days.length - 1}
+                      onClick={() => shiftDay(1)}
+                      title="将这一天后移"
+                      aria-label="将这一天后移"
+                    >
+                      <ArrowDown size={16} />
+                    </button>
+                    <button
+                      className="icon-button"
+                      disabled={trip.days.length === 1}
+                      onClick={deleteDay}
+                      title="删除这一天"
+                      aria-label="删除这一天"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 )}
               </div>
+              <div className="day-overview">
+                <span>
+                  <Route size={14} />
+                  {day.activities.length} 段安排
+                </span>
+                {dayCities.length > 0 && (
+                  <span>
+                    <MapPin size={14} />
+                    {dayCities.join(' · ')}
+                  </span>
+                )}
+                <span className="day-overview-hint">
+                  <GripVertical size={13} />
+                  拖到上方日期可换天
+                </span>
+              </div>
+              <TimelineDrop containerId={day.id}>
+                {day.activities.map((a, i) => (
+                  <ActivityCard
+                    key={a.id}
+                    activity={a}
+                    containerId={day.id}
+                    index={i}
+                    isLast={i === day.activities.length - 1}
+                    selected={focusedActivity === a.id}
+                    onEdit={() => setActivityForm({ activity: a, dayId: day.id, isNew: false })}
+                    onLocate={() => {
+                      locateActivity(a.id);
+                    }}
+                    onRemove={() => removeActivity(a)}
+                    onDuplicate={() => {
+                      if (day.activities.length >= 200) {
+                        notify('每个区域最多保存 200 段安排。');
+                        return;
+                      }
+                      const activities = [...day.activities];
+                      activities.splice(i + 1, 0, {
+                        ...a,
+                        id: id(),
+                        title: `${a.title.slice(0, 195)} · 副本`,
+                      });
+                      void updateDay({ ...day, activities });
+                      notify('已复制安排。');
+                    }}
+                    onMoveUp={() => reorder(a, i - 1)}
+                    onMoveDown={() => reorder(a, i + 1)}
+                  />
+                ))}
+              </TimelineDrop>
+              {day.activities.length === 0 && (
+                <div className="day-empty">
+                  <span>
+                    <MapPin size={29} strokeWidth={1} />
+                  </span>
+                  <h3>{isUnscheduled ? '先收集想去的地方' : '这一天，留给你的期待'}</h3>
+                  <p>
+                    {isUnscheduled
+                      ? '把景点和餐厅放进来，想好后拖到上方某一天。'
+                      : '一个景点、一顿午餐，或一段什么都不做的时间。'}
+                  </p>
+                </div>
+              )}
+              <button
+                className="add-activity"
+                disabled={day.activities.length >= 200}
+                onClick={() => addActivity()}
+              >
+                <Plus size={18} />
+                {isUnscheduled ? '添加想去的地方' : '添加一段安排'}
+              </button>
+              {day.activities.length >= 200 && (
+                <p className="muted">每个区域最多保存 200 段安排。</p>
+              )}
               {!isUnscheduled && (
-                <div className="day-heading-tools">
+                <div className="day-notes">
+                  <label htmlFor="day-notes">
+                    <StickyNote size={16} />
+                    这一天的随手记
+                  </label>
+                  <textarea
+                    id="day-notes"
+                    key={`${day.id}:notes`}
+                    value={day.notes}
+                    maxLength={5000}
+                    rows={3}
+                    placeholder="留点空白，记下路上的小期待……"
+                    onChange={(e) => void updateDay({ ...day, notes: e.target.value })}
+                  />
+                </div>
+              )}
+              {!isUnscheduled && (
+                <div className="day-pagination">
                   <button
-                    className="icon-button"
                     disabled={dayIndex === 0}
-                    onClick={() => shiftDay(-1)}
-                    title="将这一天前移"
-                    aria-label="将这一天前移"
+                    onClick={() => setDayId(trip.days[dayIndex - 1].id)}
                   >
-                    <ArrowUp size={16} />
+                    <ArrowLeft size={14} />
+                    前一天
                   </button>
+                  <span>
+                    {dayIndex + 1} / {trip.days.length}
+                  </span>
                   <button
-                    className="icon-button"
                     disabled={dayIndex === trip.days.length - 1}
-                    onClick={() => shiftDay(1)}
-                    title="将这一天后移"
-                    aria-label="将这一天后移"
+                    onClick={() => setDayId(trip.days[dayIndex + 1].id)}
                   >
-                    <ArrowDown size={16} />
-                  </button>
-                  <button
-                    className="icon-button"
-                    disabled={trip.days.length === 1}
-                    onClick={deleteDay}
-                    title="删除这一天"
-                    aria-label="删除这一天"
-                  >
-                    <Trash2 size={16} />
+                    后一天
+                    <ArrowRight size={14} />
                   </button>
                 </div>
               )}
-            </div>
-            <div className="day-overview">
-              <span>
-                <Route size={14} />
-                {day.activities.length} 段安排
-              </span>
-              {dayCities.length > 0 && (
-                <span>
-                  <MapPin size={14} />
-                  {dayCities.join(' · ')}
-                </span>
-              )}
-              <span className="day-overview-hint">
-                <GripVertical size={13} />
-                拖动排序，或拖到左侧换日期
-              </span>
-            </div>
-            <TimelineDrop containerId={day.id}>
-              {day.activities.map((a, i) => (
-                <ActivityCard
-                  key={a.id}
-                  activity={a}
-                  containerId={day.id}
-                  index={i}
-                  isLast={i === day.activities.length - 1}
-                  onEdit={() => setActivityForm({ activity: a, dayId: day.id, isNew: false })}
-                  onRemove={() => removeActivity(a)}
-                  onDuplicate={() => {
-                    if (day.activities.length >= 200) {
-                      notify('每个区域最多保存 200 段安排。');
-                      return;
-                    }
-                    const activities = [...day.activities];
-                    activities.splice(i + 1, 0, {
-                      ...a,
-                      id: id(),
-                      title: `${a.title.slice(0, 195)} · 副本`,
-                    });
-                    void updateDay({ ...day, activities });
-                    notify('已复制安排。');
-                  }}
-                  onMoveUp={() => reorder(a, i - 1)}
-                  onMoveDown={() => reorder(a, i + 1)}
-                />
-              ))}
-            </TimelineDrop>
-            {day.activities.length === 0 && (
-              <div className="day-empty">
-                <span>
-                  <MapPin size={29} strokeWidth={1} />
-                </span>
-                <h3>{isUnscheduled ? '先收集想去的地方' : '这一天，留给你的期待'}</h3>
-                <p>
-                  {isUnscheduled
-                    ? '把景点和餐厅放进来，想好后拖到左侧某一天。'
-                    : '一个景点、一顿午餐，或一段什么都不做的时间。'}
-                </p>
-              </div>
-            )}
-            <button
-              className="add-activity"
-              disabled={day.activities.length >= 200}
-              onClick={() => addActivity()}
+            </main>
+          </section>
+          {itineraryHidden && (
+            <aside
+              className="itinerary-rail glass-panel"
+              aria-label="已收起的行程"
+              data-map-overlay
             >
-              <Plus size={18} />
-              {isUnscheduled ? '添加想去的地方' : '添加一段安排'}
-            </button>
-            {day.activities.length >= 200 && <p className="muted">每个区域最多保存 200 段安排。</p>}
-            {!isUnscheduled && (
-              <div className="day-notes">
-                <label htmlFor="day-notes">
-                  <StickyNote size={16} />
-                  这一天的随手记
-                </label>
-                <textarea
-                  id="day-notes"
-                  key={`${day.id}:notes`}
-                  value={day.notes}
-                  maxLength={5000}
-                  rows={3}
-                  placeholder="留点空白，记下路上的小期待……"
-                  onChange={(e) => void updateDay({ ...day, notes: e.target.value })}
-                />
-              </div>
-            )}
-            {!isUnscheduled && (
-              <div className="day-pagination">
+              <button
+                className="rail-expand"
+                onClick={() => setItineraryHidden(false)}
+                aria-label="展开行程面板"
+                title="展开行程"
+                aria-controls="itinerary-panel"
+                aria-expanded={false}
+              >
+                <PanelLeftOpen size={18} />
+              </button>
+              <span className="rail-label">行程</span>
+              <nav ref={collapsedCalendar} aria-label="收起行程中的日期">
                 <button
-                  disabled={dayIndex === 0}
-                  onClick={() => setDayId(trip.days[dayIndex - 1].id)}
+                  onClick={() => setDayId(UNSCHEDULED)}
+                  aria-label="查看待规划"
+                  title="待规划"
+                  aria-current={isUnscheduled ? 'page' : undefined}
                 >
-                  <ArrowLeft size={14} />
-                  前一天
+                  <Inbox size={16} />
                 </button>
-                <span>
-                  {dayIndex + 1} / {trip.days.length}
-                </span>
-                <button
-                  disabled={dayIndex === trip.days.length - 1}
-                  onClick={() => setDayId(trip.days[dayIndex + 1].id)}
-                >
-                  后一天
-                  <ArrowRight size={14} />
-                </button>
-              </div>
-            )}
-          </main>
-          <aside className="editor-map-panel">
-            <div className="editor-map-header">
-              <span>
-                <CompassIcon />
-                沿途的风景
-              </span>
-              <span>JAPAN</span>
-            </div>
-            <JapanMap
-              compact
-              selected={place?.name}
-              route={dayCities.length ? dayCities : cities}
-              onSelect={setSelectedPlace}
+                {trip.days.map((d, i) => (
+                  <button
+                    key={d.id}
+                    onClick={() => setDayId(d.id)}
+                    aria-label={`查看 Day ${i + 1} · ${d.title || dateLabel(dateAt(trip.startDate, i))}`}
+                    title={`Day ${i + 1} · ${d.title || dateLabel(dateAt(trip.startDate, i))}`}
+                    aria-current={day.id === d.id ? 'page' : undefined}
+                  >
+                    {String(i + 1).padStart(2, '0')}
+                  </button>
+                ))}
+              </nav>
+              <span className="rail-total">{trip.days.length} 天</span>
+            </aside>
+          )}
+          <aside className="workspace-map" aria-label="地点与地图">
+            <TripMap
+              key={day.id}
+              activities={day.activities}
+              city={mapCity}
+              center={cityCenter(mapCity) || place?.coordinates || [139.7671, 35.6812]}
+              unscheduled={isUnscheduled}
+              selectedId={focusedActivity}
+              focusRequest={focusRequest}
+              layoutKey={String(itineraryHidden)}
+              onSelect={locateActivity}
+              onRevealMap={revealMap}
+              onExploreCity={() => setExploreCity(true)}
+              onEdit={(activity) => setActivityForm({ activity, dayId: day.id, isNew: false })}
+              onAdd={addLocated}
             />
-            <div className="map-caption">
-              <span className="legend-line" />
-              行程示意 · 非实际交通路线
-            </div>
-            <div className="destination-panel">
-              <label className="destination-select-label">
-                <MapPin size={16} />
-                <select
-                  aria-label="选择目的地城市"
-                  value={place?.name || ''}
-                  onChange={(e) => setSelectedPlace(findPlace(e.target.value))}
-                >
-                  {!place && <option value="">选择目的地城市</option>}
-                  <CityOptions />
-                </select>
-              </label>
-              {place && (
-                <>
-                  <p className="eyebrow">
-                    {place.en.toUpperCase()} / {place.region}
-                  </p>
-                  <h3>{place.name}，慢慢走。</h3>
-                  <p className="destination-description">{place.description}</p>
-                  <p className="suggestion-label">
-                    {isUnscheduled ? '把这里加入待规划' : '把这里加入今天'}
-                    <Plus size={13} />
-                  </p>
-                  <div className="spot-suggestions">
-                    {place.spots.map((spot) => (
-                      <button
-                        key={spot}
-                        disabled={day.activities.length >= 200}
-                        onClick={() => addActivity(spot, place.name)}
-                      >
-                        {spot}
-                        <Plus size={13} />
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-            <p className="editor-tip">
-              <CircleHelp size={14} />
-              城市内的安排在地图上共用城市标记。开放时间、预约与交通请在出发前自行确认。
-            </p>
           </aside>
         </div>
       </DragDropProvider>
+      {exploreCity && (
+        <Modal
+          title="探索一座城市"
+          eyebrow="A LITTLE FURTHER"
+          onClose={() => setExploreCity(false)}
+        >
+          <div className="destination-panel">
+            <CitySelector label="探索城市" value={mapCity} onChange={setSelectedCity} />
+            {place && (
+              <>
+                <p className="eyebrow">
+                  {place.en.toUpperCase()} / {place.region}
+                </p>
+                <h3>{place.name}，慢慢走。</h3>
+                <p className="destination-description">{place.description}</p>
+                <p className="suggestion-label">
+                  {isUnscheduled ? '把这里加入待规划' : '把这里加入今天'}
+                  <Plus size={13} />
+                </p>
+                <div className="spot-suggestions">
+                  {place.spots.map((spot) => (
+                    <button
+                      key={spot}
+                      disabled={day.activities.length >= 200}
+                      onClick={() => {
+                        setExploreCity(false);
+                        addActivity(spot, place.name);
+                      }}
+                    >
+                      {spot}
+                      <Plus size={13} />
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <p className="editor-tip">
+            <CircleHelp size={14} />
+            地图和搜索需要联网。交通路线将在 Google 地图打开。
+          </p>
+          <div className="modal-actions">
+            <button className="button primary" onClick={() => setExploreCity(false)}>
+              查看地图
+            </button>
+          </div>
+        </Modal>
+      )}
       {activityForm && (
         <ActivityForm
           {...activityForm}
@@ -825,7 +1003,4 @@ export function Editor({ trip, onBack, onEditTrip, onExport, onBackup, notify, c
       )}
     </div>
   );
-}
-function CompassIcon() {
-  return <MapPin size={15} />;
 }

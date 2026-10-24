@@ -3,12 +3,16 @@ import { readFile, mkdir, open, unlink } from 'node:fs/promises';
 import { dirname, extname, resolve, sep, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDatabase } from './database.mjs';
+import { createPlaceSearch } from './places.mjs';
+import { downloadDirectory } from './downloads.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const port = 4317;
 const production = process.argv.includes('--preview');
 const database = openDatabase(join(root, '.local-data'));
-const exportDirectory = join(root, 'exports');
+const exportDirectory = await downloadDirectory();
+const backupDirectory = join(root, 'exports');
+const searchPlaces = createPlaceSearch();
 const extensions = { 'application/pdf': '.pdf', 'image/png': '.png', 'application/zip': '.zip' };
 function json(response, status, value) {
   response.writeHead(status, {
@@ -27,8 +31,8 @@ async function body(request, limit) {
   }
   return Buffer.concat(chunks);
 }
-async function uniqueFile(name, write) {
-  await mkdir(exportDirectory, { recursive: true, mode: 0o700 });
+async function uniqueFile(name, write, directory = exportDirectory) {
+  await mkdir(directory, { recursive: true, mode: 0o700 });
   const safe =
     name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/^[. ]+|[. ]+$/g, '') || 'hiyori';
   const extension = extname(safe);
@@ -40,7 +44,7 @@ async function uniqueFile(name, write) {
   stem ||= 'hiyori';
   for (let i = 0; i < 10000; i++) {
     const filename = `${stem}${i ? ` (${i})` : ''}${extension}`;
-    const path = join(exportDirectory, filename);
+    const path = join(directory, filename);
     let handle;
     try {
       handle = await open(path, 'wx', 0o600);
@@ -78,6 +82,8 @@ const server = createServer(async (request, response) => {
     if ((origin && origin !== `http://${host}`) || request.headers['x-hiyori-local'] !== '1')
       return json(response, 403, { error: '请从日和旅页面操作。' });
     try {
+      if (request.method === 'GET' && url.pathname === '/api/maps/search')
+        return json(response, 200, await searchPlaces(url.searchParams));
       if (request.method === 'GET' && url.pathname === '/api/trips')
         return json(response, 200, { trips: database.all(), trash: database.trash() });
       if (request.method === 'PUT' && url.pathname === '/api/trips') {
@@ -120,7 +126,7 @@ const server = createServer(async (request, response) => {
         return json(
           response,
           201,
-          await uniqueFile(name, (_handle, path) => database.backup(path)),
+          await uniqueFile(name, (_handle, path) => database.backup(path), backupDirectory),
         );
       }
       return json(response, 404, { error: '没有这个本地操作。' });

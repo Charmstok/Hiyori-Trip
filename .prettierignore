@@ -5,3 +5,4 @@ package-lock.json
 src/data/japan.json
 
 src/data/regions.json
+src/data/cities.json

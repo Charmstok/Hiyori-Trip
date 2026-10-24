@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseTrip } from '../src/lib/validation.ts';
+import { enrichReferenceTrip } from '../src/lib/reference-trip.ts';
 
 export function openDatabase(directory) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -27,7 +28,7 @@ export function openDatabase(directory) {
       position INTEGER NOT NULL, title TEXT NOT NULL, time TEXT NOT NULL,
       duration TEXT NOT NULL, category TEXT NOT NULL, city TEXT NOT NULL,
       address TEXT NOT NULL, notes TEXT NOT NULL, cost REAL NOT NULL,
-      longitude REAL, latitude REAL,
+      longitude REAL, latitude REAL, location_source TEXT,
       PRIMARY KEY (trip_id, id),
       FOREIGN KEY (trip_id, day_id) REFERENCES days(trip_id, id) ON DELETE CASCADE
     );
@@ -70,7 +71,15 @@ export function openDatabase(directory) {
   ) {
     transaction(() => db.exec('ALTER TABLE trips ADD COLUMN deleted_at TEXT'));
   }
-  db.exec('PRAGMA user_version = 3');
+  if (
+    !db
+      .prepare('PRAGMA table_info(activities)')
+      .all()
+      .some((c) => c.name === 'location_source')
+  ) {
+    transaction(() => db.exec('ALTER TABLE activities ADD COLUMN location_source TEXT'));
+  }
+  db.exec('PRAGMA user_version = 4');
   const putTrip =
     db.prepare(`INSERT INTO trips (id,title,subtitle,destination,start_date,notes,color,created_at,updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET title=excluded.title, subtitle=excluded.subtitle,
@@ -80,7 +89,7 @@ export function openDatabase(directory) {
   const deleteDays = db.prepare('DELETE FROM days WHERE trip_id = ?');
   const putDay = db.prepare('INSERT INTO days VALUES (?, ?, ?, ?, ?)');
   const putActivity = db.prepare(
-    'INSERT INTO activities VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO activities (trip_id,day_id,id,position,title,time,duration,category,city,address,notes,cost,longitude,latitude,location_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   function transaction(fn) {
     db.exec('BEGIN IMMEDIATE');
@@ -124,6 +133,7 @@ export function openDatabase(directory) {
           a.cost,
           a.coordinates?.[0] ?? null,
           a.coordinates?.[1] ?? null,
+          a.locationSource ?? null,
         ),
       );
     }
@@ -145,6 +155,7 @@ export function openDatabase(directory) {
       notes: a.notes,
       cost: a.cost,
       ...(a.longitude !== null ? { coordinates: [a.longitude, a.latitude] } : {}),
+      ...(a.location_source ? { locationSource: a.location_source } : {}),
     };
   }
   const dayRows = db.prepare('SELECT * FROM days WHERE trip_id = ? ORDER BY position');
@@ -180,6 +191,12 @@ export function openDatabase(directory) {
         };
       });
   }
+  transaction(() => {
+    for (const trip of all()) {
+      const enriched = enrichReferenceTrip(trip);
+      if (enriched !== trip) write(enriched);
+    }
+  });
   return {
     file,
     all: () => all(),

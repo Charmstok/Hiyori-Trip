@@ -12,6 +12,16 @@ export interface Activity {
   notes: string;
   cost: number;
   coordinates?: [number, number];
+  locationSource?: 'search' | 'pin';
+}
+export interface MapPlace {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  coordinates: [number, number];
+  category: Category;
+  source: 'search' | 'pin';
 }
 export interface Day {
   id: string;
