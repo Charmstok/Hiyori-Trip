@@ -40,6 +40,7 @@ export default function App() {
     retry,
   } = useTrips();
   const [view, setView] = useState<'home' | 'trash'>('home');
+  const [homeTarget, setHomeTarget] = useState<'journeys'>();
   const [selectedId, setSelectedId] = useState<string>();
   const [tripForm, setTripForm] = useState<{ trip?: Trip; city?: string }>();
   const [exporting, setExporting] = useState(false);
@@ -56,6 +57,19 @@ export default function App() {
   const [toast, setToast] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const trip = trips.find((t) => t.id === selectedId);
+  useEffect(() => {
+    if (!homeTarget || !ready || view !== 'home' || trip) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(homeTarget)?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'instant'
+          : 'smooth',
+        block: 'start',
+      });
+      setHomeTarget(undefined);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [homeTarget, ready, view, trip?.id]);
   useEffect(() => {
     void load();
     return () => clearTimeout(timer.current);
@@ -92,11 +106,18 @@ export default function App() {
     }
   }
   const goHome = () => {
+    setHomeTarget(undefined);
     setView('home');
     setSelectedId(undefined);
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
+  const goJourneys = () => {
+    setView('home');
+    setSelectedId(undefined);
+    setHomeTarget('journeys');
+  };
   const openTrip = (id: string) => {
+    setHomeTarget(undefined);
     setView('home');
     setSelectedId(id);
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -113,28 +134,8 @@ export default function App() {
           </span>
         </button>
         <nav className="main-nav" aria-label="主导航">
-          <button
-            className={view === 'home' && !trip ? 'active' : ''}
-            onClick={() => {
-              goHome();
-              setTimeout(
-                () => document.getElementById('journeys')?.scrollIntoView({ behavior: 'smooth' }),
-                0,
-              );
-            }}
-          >
+          <button className={view === 'home' && !trip ? 'active' : ''} onClick={goJourneys}>
             我的旅程
-          </button>
-          <button
-            onClick={() => {
-              goHome();
-              setTimeout(
-                () => document.getElementById('explore')?.scrollIntoView({ behavior: 'smooth' }),
-                0,
-              );
-            }}
-          >
-            探索日本
           </button>
           <button
             className={view === 'trash' ? 'active' : ''}
@@ -193,7 +194,7 @@ export default function App() {
         <RecentlyDeleted
           trips={trash}
           busyIds={busyIds}
-          onBack={goHome}
+          onBack={goJourneys}
           onRestore={(t) => {
             void (async () => {
               if (await restore(t.id)) notify('旅程已恢复，可以在“我的旅程”继续规划。');
@@ -217,7 +218,7 @@ export default function App() {
         <Editor
           key={trip.id}
           trip={trip}
-          onBack={goHome}
+          onBack={goJourneys}
           onEditTrip={() => setTripForm({ trip })}
           onExport={() => setExporting(true)}
           onBackup={() => void backup()}
@@ -359,7 +360,8 @@ export default function App() {
             </p>
             <h3>导出与备份</h3>
             <p>
-              PNG、PDF 和图片 ZIP 保存在当前用户的下载目录，macOS 为 ~/Downloads，Linux
+              选择整趟行程或指定日期后，可保存最短为 A4 高度的 PNG 长图，或带页码的 A4 分页
+              PDF；也可将图片分段打包。文件保存在当前用户的下载目录，macOS 为 ~/Downloads，Linux
               优先使用系统设置的下载目录；SQLite 备份保存在项目的 exports/
               目录。成功后会显示完整路径。需要恢复数据库时，先停止程序并保留现有 .local-data
               文件夹，再将备份放入新建的同名文件夹，命名为 hiyori.sqlite。
@@ -367,12 +369,12 @@ export default function App() {
             <h3>关于地图</h3>
             <p>
               主页使用 Natural Earth
-              示意地图，冲绳以插图表示。编辑器可展开详细地图，搜索具体地点或手动选点；地址与准确坐标随安排保存。旧版城市中心坐标会显示为待定位。编号虚线只表示安排顺序，交通方案可点击“交通路线”在
+              示意地图，冲绳以插图表示。编辑器可展开详细地图，搜索具体地点或手动选点；地址与准确坐标随安排保存。旧版城市中心坐标会显示为待定位。地图名称与安排联动，虚线只表示安排顺序，交通方案可点击“交通路线”在
               Google 地图查看。
             </p>
             <p>
               详细底图由 OpenStreetMap 提供，地点搜索由 Photon
-              提供，均需要联网。搜索仅在提交时发送地点关键词和城市附近坐标，不发送行程日期、备注和费用；服务不可用时仍能编辑已有安排。地点名称建议使用日文或英文，开放时间与预约请自行核实。
+              提供，均需要联网。地点选择弹窗输入停顿后自动显示候选，搜索仅发送地点关键词和城市附近坐标，不发送行程日期、备注和费用；服务不可用时仍能编辑已有安排。地点名称建议使用日文或英文，开放时间与预约请自行核实。
             </p>
             <button
               className="button primary"

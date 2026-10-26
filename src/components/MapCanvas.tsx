@@ -101,7 +101,7 @@ export function MapCanvas({
   useEffect(() => {
     const view = L.map(element.current!, {
       zoomControl: false,
-      scrollWheelZoom: true,
+      scrollWheelZoom: false,
       touchZoom: true,
       zoomSnap: 0,
       minZoom: 3,

@@ -3551,6 +3551,11 @@ label {
   border-radius: 7px;
   font-size: 11px;
 }
+.place-search-status {
+  margin-top: 7px;
+  font-size: 10px;
+  color: #849578;
+}
 .place-results {
   position: absolute;
   top: calc(100% + 7px);
@@ -3571,7 +3576,8 @@ label {
   gap: 9px;
   border-bottom: 1px solid #edf0e6;
 }
-.place-results > button:hover {
+.place-results > button:hover,
+.place-results > button[aria-selected='true'] {
   background: #edf1e6;
 }
 .place-results > button > span {
@@ -4562,4 +4568,50 @@ label {
   .map-workspace:not(.itinerary-hidden) .map-place-detail {
     display: none;
   }
+}
+
+/* Continuous image sections are stitched as rows; only the final section gets a footer. */
+.export-sheet.long-section {
+  min-height: 0;
+  padding-top: 0;
+}
+.export-sheet.long-section-first {
+  padding-top: 48px;
+}
+.long-section-first .sheet-trip-name {
+  font-size: 26px;
+  color: #344b3c;
+  margin-bottom: 8px;
+}
+.sheet-trip-summary {
+  font-size: 11px;
+  color: #8a997b;
+  margin-bottom: 26px;
+}
+.long-section .sheet-day-number {
+  border-top: 1px solid #dce1d1;
+  padding-top: 23px;
+}
+.long-section .sheet-notes {
+  flex-shrink: 0;
+}
+.export-preview-selector select {
+  font-size: 10px;
+  padding: 8px 10px;
+}
+.export-preview-hint {
+  font-size: 9px;
+  color: #819174;
+  margin: 9px 0 13px;
+}
+.preview-sheet-wrapper .long-section-first {
+  padding-top: 30px;
+}
+.preview-sheet-wrapper .long-section-first .sheet-trip-name {
+  font-size: 19px;
+  margin-bottom: 7px;
+}
+.preview-sheet-wrapper .sheet-trip-summary {
+  font-size: 8px;
+  margin-bottom: 19px;
 }

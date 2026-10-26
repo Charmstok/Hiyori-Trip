@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, Font, StyleSheet, Svg, Path, pdf } from '@react-pdf/renderer';
-import type { Trip, Day } from '../types';
+import type { Trip } from '../types';
+import { exportDays, WHOLE_TRIP, type ExportScope } from './export-scope';
 import { dateAt, dateLabel, dateRange, totalActivities, totalCost, tripCities } from './trips';
 import { mainMapPath, islandMapPath } from './map-geometry';
 
@@ -56,60 +57,56 @@ const Footer = () => (
   />
 );
 
-export function TripDocument({ trip }: { trip: Trip }) {
-  const sections: { day: Day; index: number }[] = trip.days.map((day, index) => ({ day, index }));
-  if (trip.unscheduled.length)
-    sections.push({
-      day: {
-        id: 'unscheduled',
-        title: '待规划 · 想去的地方',
-        notes: '',
-        activities: trip.unscheduled,
-      },
-      index: -1,
-    });
+export function TripDocument({ trip, scope = WHOLE_TRIP }: { trip: Trip; scope?: ExportScope }) {
+  const sections = exportDays(trip, scope);
   return (
     <Document title={trip.title} author="Hiyori Trip" subject="本地生成的旅行行程" language="zh-CN">
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.brand}>HIYORI / 日和旅</Text>
-        <Text style={styles.label}>YOUR JOURNEY, YOUR RHYTHM</Text>
-        <Text style={styles.title}>{trip.title}</Text>
-        <Text style={styles.subtitle}>{trip.subtitle}</Text>
-        <Text style={styles.muted}>
-          {dateRange(trip)} · {trip.days.length} 天 · {totalActivities(trip)} 段安排
-          {trip.unscheduled.length ? `（${trip.unscheduled.length} 段待规划）` : ''}
-        </Text>
-        <Svg viewBox="0 0 700 510" style={styles.map}>
-          <Path d={mainMapPath} fill="#c8d2be" />
-          <Path d={islandMapPath} fill="#c8d2be" />
-        </Svg>
-        <Text style={styles.muted}>
-          {tripCities(trip).join(' / ') || '把时间留给喜欢的事。'}
-          {totalCost(trip) > 0 ? ` · 预计花费 JPY ${totalCost(trip).toLocaleString('zh-CN')}` : ''}
-        </Text>
-        <Text style={styles.section}>旅程一览</Text>
-        {trip.days.map((d, i) => (
-          <View key={d.id} style={styles.overview} wrap={false}>
-            <Text style={styles.dayNumber}>DAY {String(i + 1).padStart(2, '0')}</Text>
-            <Text style={styles.overviewTitle}>{d.title || '自由安排'}</Text>
-            <Text style={styles.muted}>{dateAt(trip.startDate, i).slice(5).replace('-', '/')}</Text>
-          </View>
-        ))}
-        {trip.unscheduled.length > 0 && (
-          <View style={styles.overview} wrap={false}>
-            <Text style={styles.dayNumber}>待规划</Text>
-            <Text style={styles.overviewTitle}>{trip.unscheduled.length} 个想去的地方</Text>
-            <Text style={styles.muted}>日期未定</Text>
-          </View>
-        )}
-        {trip.notes && (
-          <View>
-            <Text style={styles.section}>旅程随手记</Text>
-            <Text style={styles.note}>{trip.notes}</Text>
-          </View>
-        )}
-        <Footer />
-      </Page>
+      {scope.kind === 'trip' && (
+        <Page size="A4" style={styles.page}>
+          <Text style={styles.brand}>HIYORI / 日和旅</Text>
+          <Text style={styles.label}>YOUR JOURNEY, YOUR RHYTHM</Text>
+          <Text style={styles.title}>{trip.title}</Text>
+          <Text style={styles.subtitle}>{trip.subtitle}</Text>
+          <Text style={styles.muted}>
+            {dateRange(trip)} · {trip.days.length} 天 · {totalActivities(trip)} 段安排
+            {trip.unscheduled.length ? `（${trip.unscheduled.length} 段待规划）` : ''}
+          </Text>
+          <Svg viewBox="0 0 700 510" style={styles.map}>
+            <Path d={mainMapPath} fill="#c8d2be" />
+            <Path d={islandMapPath} fill="#c8d2be" />
+          </Svg>
+          <Text style={styles.muted}>
+            {tripCities(trip).join(' / ') || '把时间留给喜欢的事。'}
+            {totalCost(trip) > 0
+              ? ` · 预计花费 JPY ${totalCost(trip).toLocaleString('zh-CN')}`
+              : ''}
+          </Text>
+          <Text style={styles.section}>旅程一览</Text>
+          {trip.days.map((d, i) => (
+            <View key={d.id} style={styles.overview} wrap={false}>
+              <Text style={styles.dayNumber}>DAY {String(i + 1).padStart(2, '0')}</Text>
+              <Text style={styles.overviewTitle}>{d.title || '自由安排'}</Text>
+              <Text style={styles.muted}>
+                {dateAt(trip.startDate, i).slice(5).replace('-', '/')}
+              </Text>
+            </View>
+          ))}
+          {trip.unscheduled.length > 0 && (
+            <View style={styles.overview} wrap={false}>
+              <Text style={styles.dayNumber}>待规划</Text>
+              <Text style={styles.overviewTitle}>{trip.unscheduled.length} 个想去的地方</Text>
+              <Text style={styles.muted}>日期未定</Text>
+            </View>
+          )}
+          {trip.notes && (
+            <View>
+              <Text style={styles.section}>旅程随手记</Text>
+              <Text style={styles.note}>{trip.notes}</Text>
+            </View>
+          )}
+          <Footer />
+        </Page>
+      )}
       {sections.map(({ day, index: i }) => (
         <Page key={day.id} size="A4" style={styles.page}>
           <Text style={styles.brand} fixed>
@@ -159,6 +156,6 @@ export function TripDocument({ trip }: { trip: Trip }) {
     </Document>
   );
 }
-export async function createPdf(trip: Trip): Promise<Blob> {
-  return pdf(<TripDocument trip={trip} />).toBlob();
+export async function createPdf(trip: Trip, scope: ExportScope = WHOLE_TRIP): Promise<Blob> {
+  return pdf(<TripDocument trip={trip} scope={scope} />).toBlob();
 }

@@ -14,7 +14,7 @@
 
 - Map library: [Leaflet 1.9.4](https://leafletjs.com/), BSD-2-Clause. Package license is retained in npm distribution.
 - Detailed map tiles and selected search results: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), ODbL. Attribution stays visible on the map and in place search results. Tiles are requested on demand using the browser cache, following the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/); no bulk download or offline tile archive is provided.
-- Place search: [Photon by komoot](https://github.com/komoot/photon), using its public API under the stated fair-use terms. Searches are explicitly submitted by the user, limited to Japan, serialized and cached locally in memory. The public service does not guarantee availability. Saved itinerary content is not uploaded to the provider.
+- Place search: [Photon by komoot](https://github.com/komoot/photon), using its public API under the stated fair-use terms. Searches are triggered by an explicit submission or debounced typing in the location picker, limited to Japan, serialized and cached locally in memory. The public service does not guarantee availability. Saved itinerary content is not uploaded to the provider.
 - Google Maps links use the official [Maps URLs](https://developers.google.com/maps/documentation/urls/get-started) format. No Google map SDK or API key is embedded.
 
 ## City and municipality selector

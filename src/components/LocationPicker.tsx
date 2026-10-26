@@ -38,6 +38,7 @@ export function LocationPicker({
     <Modal title="为安排选择准确位置" eyebrow="A PLACE, NOT JUST A NAME" wide onClose={onClose}>
       <div className="location-picker">
         <PlaceSearch
+          suggestAsYouType
           center={center as [number, number]}
           initialQuery={activity.title}
           onSelect={(place) => {
