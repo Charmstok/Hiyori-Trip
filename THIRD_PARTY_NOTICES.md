@@ -32,8 +32,13 @@
 - Retrieved: 2026-10-23.
 - License: SIL Open Font License 1.1. Full upstream text is included in `public/fonts/OFL.txt`.
 - The upstream variable TTF was instantiated at weight 400 and encoded as a static WOFF using FontTools for local web and PDF embedding. Glyph coverage was retained; the font is distributed as part of this application.
+- PDF export expands that WOFF into an SFNT font once in worker memory, retaining all tables and glyphs to avoid repeated glyph-table decompression. No additional font download or font asset is required.
 
 ## Icons and software packages
+
+- The travel Agent uses the official [OpenAI Node SDK](https://github.com/openai/openai-node), Apache-2.0, against the user's explicitly configured OpenAI-compatible endpoint. Text and image inputs are sent only when the user tests a connection or generates a plan.
+- Public-page extraction uses [Mozilla Readability](https://github.com/mozilla/readability), Apache-2.0, and [LinkeDOM](https://github.com/WebReflection/linkedom), ISC. Pages are parsed as inert content; login cookies and browser sessions are not used.
+- Local XLSX parsing uses [read-excel-file](https://gitlab.com/catamphetamine/read-excel-file), MIT. No cloud spreadsheet service or separate OCR provider is used. PNG compression and bounded XLSX repacking use the existing fflate dependency, MIT.
 
 Lucide icons and npm dependencies retain their respective upstream licenses. See each installed package's license. Exact dependency versions and integrity information are recorded in `package-lock.json`.
 

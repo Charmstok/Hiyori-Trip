@@ -3,9 +3,30 @@ import type { Trip } from '../types';
 import { exportDays, WHOLE_TRIP, type ExportScope } from './export-scope';
 import { dateAt, dateLabel, dateRange, totalActivities, totalCost, tripCities } from './trips';
 import { mainMapPath, islandMapPath } from './map-geometry';
+import { unpackPdfFont } from './pdf-font';
 
-Font.register({ family: 'Hiyori', src: '/fonts/NotoSansSC-Regular.woff' });
 Font.registerHyphenationCallback((word) => Array.from(word));
+let fontReady: Promise<void> | undefined;
+export function preparePdf(): Promise<void> {
+  fontReady ??= (async () => {
+    const response = await fetch('/fonts/NotoSansSC-Regular.woff', {
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error('PDF 字体加载失败，请确认本地服务仍在运行后重试。');
+    const font = unpackPdfFont(await response.arrayBuffer());
+    const url = URL.createObjectURL(new Blob([font], { type: 'font/ttf' }));
+    try {
+      Font.register({ family: 'Hiyori', src: url });
+      await Font.load({ fontFamily: 'Hiyori' });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  })().catch(() => {
+    fontReady = undefined;
+    throw new Error('PDF 字体准备失败，请确认本地服务仍在运行后重试。');
+  });
+  return fontReady;
+}
 const styles = StyleSheet.create({
   page: {
     fontFamily: 'Hiyori',
@@ -157,5 +178,6 @@ export function TripDocument({ trip, scope = WHOLE_TRIP }: { trip: Trip; scope?:
   );
 }
 export async function createPdf(trip: Trip, scope: ExportScope = WHOLE_TRIP): Promise<Blob> {
+  await preparePdf();
   return pdf(<TripDocument trip={trip} scope={scope} />).toBlob();
 }

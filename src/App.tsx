@@ -8,6 +8,7 @@ import {
   HardDrive,
   LoaderCircle,
   Sun,
+  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
@@ -17,6 +18,7 @@ import { Editor } from './components/Editor';
 import { TripForm } from './components/TripForm';
 import { Modal } from './components/Modal';
 import { ExportModal } from './components/ExportModal';
+import { AgentModal } from './components/AgentModal';
 import { useTrips } from './lib/store';
 import { backupDatabase } from './lib/db';
 import type { SavedFile } from './lib/db';
@@ -46,6 +48,7 @@ export default function App() {
   const [exporting, setExporting] = useState(false);
   const [savedFile, setSavedFile] = useState<SavedFile>();
   const [help, setHelp] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [confirmation, setConfirmation] = useState<{
     title: string;
@@ -56,6 +59,7 @@ export default function App() {
   }>();
   const [toast, setToast] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const agentImport = useRef<{ sourceId: string; trip: Trip } | undefined>(undefined);
   const trip = trips.find((t) => t.id === selectedId);
   useEffect(() => {
     if (!homeTarget || !ready || view !== 'home' || trip) return;
@@ -149,6 +153,14 @@ export default function App() {
           </button>
         </nav>
         <div className="header-tools">
+          <button
+            className="button small agent-entry"
+            aria-label="旅行 Agent"
+            onClick={() => setAgentOpen(true)}
+          >
+            <Sparkles size={15} />
+            <span>旅行 Agent</span>
+          </button>
           <span className={`save-status ${storageFailed ? 'failed' : ''}`} role="status">
             {pending ? (
               <LoaderCircle size={13} className="spin" />
@@ -281,6 +293,24 @@ export default function App() {
       {exporting && trip && (
         <ExportModal trip={trip} onClose={() => setExporting(false)} onSaved={showSaved} />
       )}
+      {agentOpen && (
+        <AgentModal
+          onClose={() => setAgentOpen(false)}
+          onSave={async (draft) => {
+            const imported =
+              agentImport.current?.sourceId === draft.id
+                ? agentImport.current.trip
+                : cloneTrip(draft);
+            imported.title = draft.title;
+            agentImport.current = { sourceId: draft.id, trip: imported };
+            if (!(await save(imported, false))) return false;
+            agentImport.current = undefined;
+            setAgentOpen(false);
+            openTrip(imported.id);
+            return true;
+          }}
+        />
+      )}
       {savedFile && (
         <Modal
           title="文件已保存"
@@ -365,6 +395,12 @@ export default function App() {
               优先使用系统设置的下载目录；SQLite 备份保存在项目的 exports/
               目录。成功后会显示完整路径。需要恢复数据库时，先停止程序并保留现有 .local-data
               文件夹，再将备份放入新建的同名文件夹，命名为 hiyori.sqlite。
+            </p>
+            <h3>旅行 Agent</h3>
+            <p>
+              在右上角配置自己的 OpenAI 兼容模型，可将公开攻略链接、文字、XLSX / CSV
+              表格和图片整理为行程草案。API Key
+              与最近草案自动加密保存在本机；生成时材料会发送至你配置的模型服务。图片需要支持视觉的模型，受登录限制的链接可改为粘贴文字或上传截图。预览并保存后，可以继续编辑和导出。
             </p>
             <h3>关于地图</h3>
             <p>

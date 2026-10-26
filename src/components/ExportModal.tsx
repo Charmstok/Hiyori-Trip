@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, Download, FileText, Image, LoaderCircle } from 'lucide-react';
 import type { Trip } from '../types';
 import { safeFilename } from '../lib/files';
 import { saveFile, type SavedFile } from '../lib/db';
+import { exportTripPdf, warmPdf } from '../lib/pdf-export';
 import { dateAt, dateLabel } from '../lib/trips';
 import {
   exportImages,
@@ -42,6 +43,9 @@ export function ExportModal({
   });
   const stage = useRef<HTMLDivElement>(null);
   const filename = `${safeFilename(trip.title)}-${scopeFilename(scope)}`;
+  useEffect(() => {
+    void warmPdf().catch(() => {});
+  }, []);
 
   function changeScope(kind: ExportScope['kind']) {
     setScope(kind === 'day' ? { kind, dayIndex } : { kind });
@@ -144,31 +148,10 @@ export function ExportModal({
   }
   async function exportPdf() {
     setError('');
-    setBusy('正在排版 PDF，首次导出需要稍等…');
+    setBusy('正在准备 PDF…');
     try {
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        const worker = new Worker(new URL('../lib/pdf.worker.ts', import.meta.url), {
-          type: 'module',
-        });
-        const timeout = setTimeout(() => {
-          worker.terminate();
-          reject(new Error('PDF 生成超时，请按日期分别导出后重试。'));
-        }, 120_000);
-        const finish = () => {
-          clearTimeout(timeout);
-          worker.terminate();
-        };
-        worker.onmessage = ({ data }: { data: { blob?: Blob; error?: string } }) => {
-          finish();
-          if (data.blob) resolve(data.blob);
-          else reject(new Error(data.error || 'PDF 生成失败。'));
-        };
-        worker.onerror = () => {
-          finish();
-          reject(new Error('本地 PDF 排版程序未能运行。'));
-        };
-        worker.postMessage({ trip, scope });
-      });
+      const blob = await exportTripPdf(trip, scope, setBusy);
+      setBusy('正在保存到下载文件夹…');
       await persist(blob, `${filename}-行程.pdf`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'PDF 保存失败，请检查本地服务后重试。');
